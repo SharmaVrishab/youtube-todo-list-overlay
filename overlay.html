@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>To-Do Overlay</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Space Mono', 'Courier New', monospace;
+      background: transparent;
+    }
+
+    /* ── Widget shell ── */
+    #widget {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 360px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    /* ── Fixed header ── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: rgba(15, 15, 15, 0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    #header .cmd {
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: #4ade80;
+    }
+
+    #header .counter {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: #555;
+    }
+
+    /* ── Scroll area — height clamped to one copy in JS ── */
+    #scroll-area {
+      overflow: hidden;
+    }
+
+    /* ── Inner wrapper: real content + clone stacked ── */
+    #scroll-inner {
+      will-change: transform;
+    }
+
+    @keyframes loop-up {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-50%); }
+    }
+
+    #scroll-inner.scrolling {
+      animation: loop-up 20s linear infinite;
+    }
+
+    /* ── Per-user card ── */
+    .user-section {
+      background: rgba(15, 15, 15, 0.82);
+      border-left: 3px solid transparent; /* color set inline per user */
+      border-radius: 4px;
+      padding: 10px 14px 12px;
+      margin-bottom: 8px;
+    }
+
+    /* ── Username row ── */
+    .username-row {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 7px;
+      letter-spacing: 0.3px;
+      /* color set inline per user */
+    }
+
+    /* ── Task items ── */
+    .task-item {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 12.5px;
+      color: #e8e8e8;
+      line-height: 1.6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .task-item .num {
+      color: #666;
+      flex-shrink: 0;
+      min-width: 18px;
+      text-align: right;
+    }
+
+    .task-item .txt {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Current task — brighter */
+    .task-item.current .txt {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    /* Done tasks — strikethrough + muted */
+    .task-item.done .txt {
+      text-decoration: line-through;
+      color: #555;
+    }
+
+    .task-item.done .num { color: #444; }
+
+    /* ── Empty state ── */
+    #empty {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: #555;
+      background: rgba(15,15,15,0.7);
+      border-radius: 4px;
+      padding: 14px;
+      line-height: 1.9;
+    }
+  </style>
+</head>
+<body>
+
+<div id="widget">
+  <!-- Fixed header — always visible -->
+  <div id="header">
+    <span class="cmd">!task</span>
+    <span class="counter" id="headerCounter"></span>
+  </div>
+
+  <div id="scroll-area">
+    <div id="scroll-inner">
+      <div id="content">
+        <div id="empty">
+          !add  task1, task2<br>
+          !done [number]<br>
+          !remove number<br>
+          !clear
+        </div>
+      </div>
+      <div id="content-clone" aria-hidden="true"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const state = {};
+
+  // Cycling username colors — same order every time per username
+  const COLORS = ['#4ade80','#60a5fa','#fb923c','#f472b6','#a78bfa','#34d399','#fbbf24','#f87171'];
+  const userColorMap = {};
+  let colorIdx = 0;
+
+  function colorFor(user) {
+    if (!userColorMap[user]) {
+      userColorMap[user] = COLORS[colorIdx % COLORS.length];
+      colorIdx++;
+    }
+    return userColorMap[user];
+  }
+
+  // ── Auto-scroll (CSS animation) ─────────────────────────────────────────────
+  const scrollInnerEl = document.getElementById('scroll-inner');
+
+  function startScroll() { scrollInnerEl.classList.add('scrolling'); }
+
+  function stopScroll() { scrollInnerEl.classList.remove('scrolling'); }
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+  let ws;
+
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}`);
+    ws.onmessage = e => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'all') {
+        for (const k in state) delete state[k];
+        for (const u in data.users) {
+          if (data.users[u].length > 0) state[u] = data.users[u];
+        }
+        render();
+      } else if (data.type === 'user') {
+        if (data.todos.length === 0) delete state[data.user];
+        else state[data.user] = data.todos;
+        render();
+      } else if (data.type === 'control') {
+        if (data.action === 'start') startScroll();
+        else if (data.action === 'stop') stopScroll();
+      }
+    };
+    ws.onclose = () => setTimeout(connect, 2000);
+  }
+
+  connect();
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const contentEl  = document.getElementById('content');
+  const cloneEl    = document.getElementById('content-clone');
+  const emptyEl    = document.getElementById('empty');
+  const scrollArea = document.getElementById('scroll-area');
+  const counterEl  = document.getElementById('headerCounter');
+
+  function render() {
+    const users = Object.keys(state);
+
+    // Update header counter
+    let totalDone = 0, totalAll = 0;
+    users.forEach(u => {
+      totalAll  += state[u].length;
+      totalDone += state[u].filter(t => t.done).length;
+    });
+    counterEl.textContent = totalAll > 0 ? `${totalDone}/${totalAll}` : '';
+
+    if (users.length === 0) {
+      emptyEl.style.display = '';
+      contentEl.querySelectorAll('.user-section').forEach(el => el.remove());
+      cloneEl.innerHTML = '';
+      scrollArea.style.height = '';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+
+    // Remove stale users
+    contentEl.querySelectorAll('.user-section').forEach(el => {
+      if (!state[el.dataset.user]) el.remove();
+    });
+
+    // Render each user card
+    users.forEach(user => {
+      let section = contentEl.querySelector(`.user-section[data-user="${CSS.escape(user)}"]`);
+      if (!section) {
+        section = document.createElement('div');
+        section.className = 'user-section';
+        section.dataset.user = user;
+        contentEl.appendChild(section);
+      }
+      section.style.borderLeftColor = colorFor(user);
+      section.innerHTML = buildSection(user);
+    });
+
+    // Clamp scroll-area to exactly one copy — clone hidden below
+    scrollArea.style.height = contentEl.scrollHeight + 'px';
+
+    // Sync clone and restart animation with new height
+    cloneEl.innerHTML = contentEl.innerHTML;
+    if (scrollInnerEl.classList.contains('scrolling')) {
+      scrollInnerEl.classList.remove('scrolling');
+      scrollInnerEl.offsetHeight;
+      scrollInnerEl.classList.add('scrolling');
+    }
+  }
+
+  function buildSection(user) {
+    const todos  = state[user];
+    const curIdx = todos.findIndex(t => !t.done);
+    const color  = colorFor(user);
+
+    const rows = todos.map((t, i) => {
+      const cls = (i === curIdx ? 'current ' : '') + (t.done ? 'done' : '');
+      return `<div class="task-item ${cls}">
+        <span class="num">${i + 1}.</span>
+        <span class="txt">${h(t.task)}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="username-row" style="color:${color}">${h(user)}</div>${rows}`;
+  }
+
+  const h = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+</script>
+</body>
+</html>

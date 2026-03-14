@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stream To-Do Dashboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #d4a84b;
+      --gold-dim: #a07830;
+      --bg: #0f0c08;
+      --surface: #1a1408;
+      --surface2: #241c0e;
+      --border: rgba(210,165,80,0.2);
+      --text: #e0d0a0;
+      --muted: #7a6840;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    .header p {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .ws-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+    }
+
+    .ws-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #c05050;
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+
+    .ws-dot.on { background: #50c050; }
+
+    /* ── Add bar ── */
+    .add-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .add-bar input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .add-bar input:focus { border-color: var(--gold-dim); }
+
+    #inUser  { width: 160px; flex-shrink: 0; }
+    #inTasks { flex: 1; }
+
+    .btn-add {
+      background: var(--gold);
+      color: #1a1000;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 18px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+
+    .btn-add:hover { opacity: 0.85; }
+
+    .add-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 22px;
+    }
+
+    #status {
+      font-size: 11px;
+      color: var(--gold);
+      margin-left: 8px;
+    }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── User group ── */
+    .user-group {
+      margin-bottom: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: rgba(210,165,80,0.07);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .group-username {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    .group-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .group-counter {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .btn-clear-user {
+      font-size: 11px;
+      color: #c06060;
+      background: none;
+      border: 1px solid rgba(180,60,60,0.3);
+      border-radius: 6px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+
+    .btn-clear-user:hover { background: rgba(180,60,60,0.15); }
+
+    /* ── Progress bar ── */
+    .progress-track {
+      height: 3px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #a07030, #d4a84b);
+      transition: width 0.4s;
+    }
+
+    /* ── Task rows ── */
+    .task-list {
+      padding: 6px 0 6px;
+    }
+
+    .task-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      margin: 2px 6px;
+      transition: background 0.15s;
+    }
+
+    .task-row.current {
+      background: rgba(210,165,60,0.1);
+      border: 1px solid rgba(210,165,60,0.2);
+    }
+
+    .task-row.done-row { opacity: 0.4; }
+
+    .task-num {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 20px;
+      text-align: right;
+    }
+
+    .task-text {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .task-row.done-row .task-text {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    .task-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+    .btn-sm {
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      padding: 3px 9px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+
+    .btn-done   { background: rgba(80,160,80,0.18);  color: #80c880; border-color: rgba(80,160,80,0.3); }
+    .btn-undone { background: rgba(180,140,40,0.18); color: #d4a84b; border-color: rgba(180,140,40,0.3); }
+    .btn-remove { background: rgba(180,60,60,0.18);  color: #e08080; border-color: rgba(180,60,60,0.3); }
+
+    /* ── Command bar ── */
+    .cmd-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .cmd-bar input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .cmd-bar input:focus { border-color: var(--gold-dim); }
+    #cmdUser { width: 130px; flex-shrink: 0; }
+    #cmdMsg  { flex: 1; }
+
+    .btn-send {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: border-color 0.2s;
+    }
+
+    .btn-send:hover { border-color: var(--gold-dim); }
+
+    .cmd-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      margin-bottom: 22px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .btn-quick {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--gold);
+      border-radius: 20px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-quick:hover { background: var(--surface2); }
+
+    /* ── Empty state ── */
+    .empty {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .empty code { color: var(--gold); font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div>
+    <h1>Stream To-Do Dashboard</h1>
+    <p>OBS overlay → <code style="color:var(--gold)">http://localhost:3002/overlay</code></p>
+  </div>
+  <div class="ws-pill">
+    <span class="ws-dot" id="wsDot"></span>
+    <span id="wsLabel">Connecting…</span>
+  </div>
+</div>
+
+<!-- ── Add tasks ── -->
+<div class="add-bar">
+  <input id="inUser"  type="text" placeholder="Username" />
+  <input id="inTasks" type="text" placeholder="Task 1, Task 2, Task 3…" />
+  <button class="btn-add" onclick="addTasks()">+ Add</button>
+  <span id="status"></span>
+</div>
+<div class="add-hint">Separate tasks with commas · Press Enter to submit</div>
+
+<!-- ── Command bar ── -->
+<div class="cmd-bar">
+  <input id="cmdUser" type="text" placeholder="Username" />
+  <input id="cmdMsg"  type="text" placeholder="!start · !stop · !done 2 · !remove 1 · !clear · !edit 2 new text" />
+  <button class="btn-send" onclick="sendCmd()">Send</button>
+</div>
+<div class="cmd-hint">
+  Quick actions:
+  <button class="btn-quick" onclick="quickCmd('!start')">▶ Start scroll</button>
+  <button class="btn-quick" onclick="quickCmd('!stop')">■ Stop scroll</button>
+</div>
+
+<!-- ── All users ── -->
+<div class="section-title">Live Tasks</div>
+<div id="taskArea">
+  <div class="empty">Waiting for tasks…</div>
+</div>
+
+<script>
+  const state = {}; // username -> [{ id, task, done }]
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+  const wsDot   = document.getElementById('wsDot');
+  const wsLabel = document.getElementById('wsLabel');
+  let ws;
+
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}`);
+
+    ws.onopen = () => {
+      wsDot.classList.add('on');
+      wsLabel.textContent = 'Connected';
+    };
+
+    ws.onmessage = e => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'all') {
+        for (const k in state) delete state[k];
+        for (const u in data.users) {
+          if (data.users[u].length > 0) state[u] = data.users[u];
+        }
+      } else if (data.type === 'user') {
+        if (data.todos.length === 0) delete state[data.user];
+        else state[data.user] = data.todos;
+      }
+      render();
+    };
+
+    ws.onclose = () => {
+      wsDot.classList.remove('on');
+      wsLabel.textContent = 'Reconnecting…';
+      setTimeout(connect, 2000);
+    };
+  }
+
+  connect();
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const taskArea = document.getElementById('taskArea');
+
+  function render() {
+    const users = Object.keys(state);
+    if (users.length === 0) {
+      taskArea.innerHTML = `<div class="empty">No active tasks yet.<br>Type a username + tasks above, or have viewers use <code>!add</code> in chat.</div>`;
+      return;
+    }
+    taskArea.innerHTML = users.map(userGroup).join('');
+  }
+
+  function userGroup(user) {
+    const todos = state[user];
+    const done  = todos.filter(t => t.done).length;
+    const total = todos.length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+    const curIdx = todos.findIndex(t => !t.done);
+
+    const rows = todos.map((t, i) => {
+      const n   = i + 1;
+      const cls = (i === curIdx ? 'current ' : '') + (t.done ? 'done-row' : '');
+      const btn = t.done
+        ? `<button class="btn-sm btn-undone" onclick="cmd('${esc(user)}','!undone ${n}')">↩ Undone</button>`
+        : `<button class="btn-sm btn-done"   onclick="cmd('${esc(user)}','!done ${n}')">✓ Done</button>`;
+      return `<div class="task-row ${cls}">
+        <span class="task-num">${n}.</span>
+        <span class="task-text">${h(t.task)}</span>
+        <div class="task-actions">
+          ${btn}
+          <button class="btn-sm btn-remove" onclick="cmd('${esc(user)}','!remove ${n}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="user-group">
+      <div class="group-header">
+        <span class="group-username">${h(user)}</span>
+        <div class="group-right">
+          <span class="group-counter">${done}/${total} done</span>
+          <button class="btn-clear-user" onclick="clearUser('${esc(user)}')">Clear</button>
+        </div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="task-list">${rows}</div>
+    </div>`;
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  async function addTasks() {
+    const user  = document.getElementById('inUser').value.trim();
+    const tasks = document.getElementById('inTasks').value.trim();
+    if (!user || !tasks) return flash('Enter a username and tasks', false);
+    await post('/command', { user, message: `!add ${tasks}` });
+    document.getElementById('inTasks').value = '';
+    flash(`Added tasks for ${user}`);
+  }
+
+  async function cmd(user, message) {
+    await post('/command', { user, message });
+  }
+
+  async function sendCmd() {
+    const user    = document.getElementById('cmdUser').value.trim();
+    const message = document.getElementById('cmdMsg').value.trim();
+    if (!message) return;
+    // Commands like !start / !stop don't need a user — use a placeholder
+    await post('/command', { user: user || '_host', message });
+    document.getElementById('cmdMsg').value = '';
+    flash(`Sent: ${message}`);
+  }
+
+  async function quickCmd(message) {
+    await post('/command', { user: '_host', message });
+    flash(`Sent: ${message}`);
+  }
+
+  async function clearUser(user) {
+    await fetch(`/todos/${user}`, { method: 'DELETE' });
+  }
+
+  async function post(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return r.json();
+  }
+
+  function flash(msg, ok = true) {
+    const el = document.getElementById('status');
+    el.style.color = ok ? 'var(--gold)' : '#e08080';
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = ''; }, 2500);
+  }
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+  const h   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const esc = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  document.getElementById('inTasks').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addTasks();
+  });
+  document.getElementById('cmdMsg').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendCmd();
+  });
+</script>
+</body>
+</html>
