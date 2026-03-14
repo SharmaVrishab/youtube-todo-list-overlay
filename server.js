@@ -283,6 +283,7 @@ app.delete('/todos/:user', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/', (req, res) => res.redirect('/dashboard'));
 app.get('/overlay', (req, res) => res.sendFile(path.join(__dirname, 'overlay.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
