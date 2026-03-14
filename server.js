@@ -249,6 +249,7 @@ app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
+    redirect_uri: `${BASE_URL}/auth/callback`,
     scope: ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube.force-ssl'],
   });
   res.redirect(url);
@@ -256,7 +257,7 @@ app.get('/auth', (req, res) => {
 
 app.get('/auth/callback', async (req, res) => {
   try {
-    const { tokens } = await oauth2Client.getToken(req.query.code);
+    const { tokens } = await oauth2Client.getToken({ code: req.query.code, redirect_uri: `${BASE_URL}/auth/callback` });
     oauth2Client.setCredentials(tokens);
     saveTokens(tokens);
     res.send('<h2>✅ Auth successful! You can close this tab.</h2><p>The server is now connected to your YouTube account.</p>');
