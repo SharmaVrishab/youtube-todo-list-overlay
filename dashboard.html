@@ -337,7 +337,7 @@
 <div class="header">
   <div>
     <h1>Stream To-Do Dashboard</h1>
-    <p>OBS overlay → <code style="color:var(--gold)">http://localhost:3002/overlay</code></p>
+    <p>OBS overlay → <code style="color:var(--gold)" id="overlayUrl"></code></p>
   </div>
   <div class="ws-pill">
     <span class="ws-dot" id="wsDot"></span>
@@ -511,6 +511,8 @@
   // ── Utils ──────────────────────────────────────────────────────────────────
   const h   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const esc = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  document.getElementById('overlayUrl').textContent = `${location.origin}/overlay`;
 
   document.getElementById('inTasks').addEventListener('keydown', e => {
     if (e.key === 'Enter') addTasks();
