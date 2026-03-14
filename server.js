@@ -311,8 +311,8 @@ wss.on('connection', ws => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`\n🎬 YouTube To-Do Widget running!`);
-  console.log(`   Overlay   → http://localhost:${PORT}/overlay`);
-  console.log(`   Dashboard → http://localhost:${PORT}/dashboard`);
+  console.log(`   Overlay   → ${BASE_URL}/overlay`);
+  console.log(`   Dashboard → ${BASE_URL}/dashboard`);
 
   if (savedTokens) {
     console.log(`   OAuth tokens found — scanning for live stream...`);
@@ -320,6 +320,6 @@ server.listen(PORT, () => {
   } else {
     console.log(`\n⚠️  Not authenticated yet!`);
     console.log(`   Open this URL to connect your YouTube account:`);
-    console.log(`   → http://localhost:${PORT}/auth\n`);
+    console.log(`   → ${BASE_URL}/auth\n`);
   }
 });
