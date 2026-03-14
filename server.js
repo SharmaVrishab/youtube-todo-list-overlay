@@ -192,6 +192,10 @@ function handleCommand(user, message) {
 let pageToken = null;
 let activeLiveChatId = null;
 
+const MAX_RETRIES = 5;
+let fetchRetries = 0;
+let pollRetries  = 0;
+
 async function fetchLiveChatId() {
   try {
     const res = await youtube.liveBroadcasts.list({
@@ -214,11 +218,16 @@ async function fetchLiveChatId() {
       return;
     }
 
+    fetchRetries = 0; // reset on success
     activeLiveChatId = chatId;
     console.log(`✅ Live chat detected: "${broadcast.snippet.title}"`);
     pollYouTubeChat();
   } catch (err) {
     console.error('Error fetching live chat ID:', err.response?.data?.error?.message || err.message);
+    if (++fetchRetries >= MAX_RETRIES) {
+      console.error(`❌ fetchLiveChatId failed ${MAX_RETRIES} times — giving up. Re-authenticate to restart.`);
+      return;
+    }
     setTimeout(fetchLiveChatId, 30000);
   }
 }
@@ -235,6 +244,7 @@ async function pollYouTubeChat() {
 
     const res = await youtube.liveChatMessages.list(params);
 
+    pollRetries = 0; // reset on success
     pageToken = res.data.nextPageToken;
     const items = res.data.items || [];
 
@@ -252,9 +262,14 @@ async function pollYouTubeChat() {
     if (status === 403 || status === 404) {
       activeLiveChatId = null;
       pageToken = null;
+      fetchRetries = 0;
       console.log('Live chat ended, scanning for new stream...');
       setTimeout(fetchLiveChatId, 30000);
     } else {
+      if (++pollRetries >= MAX_RETRIES) {
+        console.error(`❌ pollYouTubeChat failed ${MAX_RETRIES} times — giving up. Re-authenticate to restart.`);
+        return;
+      }
       setTimeout(pollYouTubeChat, POLL_INTERVAL_MS);
     }
   }
