@@ -11,7 +11,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3002;
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 8000; // 8s minimum → ~9,000 units for 4hr stream (fits in 10k daily quota)
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // ─── OAuth2 setup ─────────────────────────────────────────────────────────────
@@ -224,7 +224,7 @@ async function pollYouTubeChat() {
       if (text.startsWith('!')) handleCommand(user, text);
     });
 
-    const interval = res.data.pollingIntervalMillis || POLL_INTERVAL_MS;
+    const interval = Math.max(res.data.pollingIntervalMillis || POLL_INTERVAL_MS, POLL_INTERVAL_MS);
     setTimeout(pollYouTubeChat, interval);
   } catch (err) {
     const status = err.response?.status;
