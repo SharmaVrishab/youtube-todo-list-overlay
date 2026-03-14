@@ -12,7 +12,8 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3002;
 const POLL_INTERVAL_MS = 8000; // 8s minimum → ~9,000 units for 4hr stream (fits in 10k daily quota)
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL ||
+  (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${PORT}`);
 
 // ─── OAuth2 setup ─────────────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
