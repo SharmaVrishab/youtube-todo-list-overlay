@@ -158,8 +158,6 @@
 
 <script>
   const state = {};
-  const lastUpdated = {}; // tracks when each user last changed — for sorting
-  const MAX_VISIBLE = 10; // max users rendered in overlay at once
 
   // Cycling username colors — same order every time per username
   const COLORS = ['#4ade80','#60a5fa','#fb923c','#f472b6','#a78bfa','#34d399','#fbbf24','#f87171'];
@@ -191,13 +189,13 @@
       if (data.type === 'all') {
         for (const k in state) delete state[k];
         for (const u in data.users) {
-          if (data.users[u].length > 0) { state[u] = data.users[u]; lastUpdated[u] = Date.now(); }
+          if (data.users[u].length > 0) state[u] = data.users[u];
         }
         render();
       } else if (data.type === 'user') {
-        if (data.todos.length === 0) { delete state[data.user]; delete lastUpdated[data.user]; }
-        else { state[data.user] = data.todos; lastUpdated[data.user] = Date.now(); }
-        render();
+        if (data.todos.length === 0) delete state[data.user];
+        else state[data.user] = data.todos;
+        renderUser(data.user);
       } else if (data.type === 'control') {
         if (data.action === 'start') startScroll();
         else if (data.action === 'stop') stopScroll();
@@ -215,18 +213,42 @@
   const scrollArea = document.getElementById('scroll-area');
   const counterEl  = document.getElementById('headerCounter');
 
-  function render() {
-    const allUsers = Object.keys(state);
+  let cloneDirty = false;
+  let cloneTimer = null;
 
-    // Update header counter across ALL users (not just visible)
+  function scheduleCloneSync() {
+    if (cloneTimer) return;
+    cloneTimer = setTimeout(() => {
+      cloneTimer = null;
+      const prevHeight = scrollArea.style.height;
+      const newHeight = contentEl.scrollHeight + 'px';
+      scrollArea.style.height = newHeight;
+      cloneEl.innerHTML = contentEl.innerHTML;
+      // Only restart animation if height changed
+      if (prevHeight !== newHeight && scrollInnerEl.classList.contains('scrolling')) {
+        scrollInnerEl.classList.remove('scrolling');
+        scrollInnerEl.offsetHeight;
+        scrollInnerEl.classList.add('scrolling');
+      }
+    }, 300);
+  }
+
+  function updateCounter() {
+    const users = Object.keys(state);
     let totalDone = 0, totalAll = 0;
-    allUsers.forEach(u => {
+    users.forEach(u => {
       totalAll  += state[u].length;
       totalDone += state[u].filter(t => t.done).length;
     });
     counterEl.textContent = totalAll > 0 ? `${totalDone}/${totalAll}` : '';
+  }
 
-    if (allUsers.length === 0) {
+  // Full re-render (used on initial load / reconnect)
+  function render() {
+    const users = Object.keys(state);
+    updateCounter();
+
+    if (users.length === 0) {
       emptyEl.style.display = '';
       contentEl.querySelectorAll('.user-section').forEach(el => el.remove());
       cloneEl.innerHTML = '';
@@ -236,18 +258,13 @@
 
     emptyEl.style.display = 'none';
 
-    // Only render the MAX_VISIBLE most recently active users
-    const visibleUsers = allUsers
-      .sort((a, b) => (lastUpdated[b] || 0) - (lastUpdated[a] || 0))
-      .slice(0, MAX_VISIBLE);
-
-    // Remove cards no longer in visible set
+    // Remove stale users
     contentEl.querySelectorAll('.user-section').forEach(el => {
-      if (!visibleUsers.includes(el.dataset.user)) el.remove();
+      if (!state[el.dataset.user]) el.remove();
     });
 
-    // Render each visible user card
-    visibleUsers.forEach(user => {
+    // Render all user cards
+    users.forEach(user => {
       let section = contentEl.querySelector(`.user-section[data-user="${CSS.escape(user)}"]`);
       if (!section) {
         section = document.createElement('div');
@@ -259,16 +276,31 @@
       section.innerHTML = buildSection(user);
     });
 
-    // Clamp scroll-area to exactly one copy — clone hidden below
-    scrollArea.style.height = contentEl.scrollHeight + 'px';
+    scheduleCloneSync();
+  }
 
-    // Sync clone and restart animation with new height
-    cloneEl.innerHTML = contentEl.innerHTML;
-    if (scrollInnerEl.classList.contains('scrolling')) {
-      scrollInnerEl.classList.remove('scrolling');
-      scrollInnerEl.offsetHeight;
-      scrollInnerEl.classList.add('scrolling');
+  // Targeted update — only re-renders the one changed user
+  function renderUser(user) {
+    updateCounter();
+    emptyEl.style.display = Object.keys(state).length === 0 ? '' : 'none';
+
+    if (!state[user]) {
+      // User cleared — remove their card
+      const section = contentEl.querySelector(`.user-section[data-user="${CSS.escape(user)}"]`);
+      if (section) section.remove();
+    } else {
+      let section = contentEl.querySelector(`.user-section[data-user="${CSS.escape(user)}"]`);
+      if (!section) {
+        section = document.createElement('div');
+        section.className = 'user-section';
+        section.dataset.user = user;
+        contentEl.appendChild(section);
+      }
+      section.style.borderLeftColor = colorFor(user);
+      section.innerHTML = buildSection(user);
     }
+
+    scheduleCloneSync();
   }
 
   function buildSection(user) {
