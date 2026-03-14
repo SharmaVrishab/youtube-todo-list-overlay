@@ -1,4 +1,8 @@
-require('dotenv').config();
+// Only load .env in local dev — Railway injects vars directly into process.env
+if (!process.env.RAILWAY_PUBLIC_DOMAIN) {
+  require('dotenv').config();
+}
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -6,25 +10,48 @@ const path = require('path');
 const fs = require('fs');
 const { google } = require('googleapis');
 
+// ─── Config — validate required vars at startup ───────────────────────────────
+const config = {
+  clientId:     process.env.OAUTH_CLIENT_ID,
+  clientSecret: process.env.OAUTH_CLIENT_SECRET,
+  refreshToken: process.env.OAUTH_REFRESH_TOKEN, // optional — set after first auth
+  port:         process.env.PORT || 3002,
+  baseUrl:      process.env.BASE_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : null), // resolved after port is known
+};
+
+const REQUIRED = ['clientId', 'clientSecret'];
+const missing = REQUIRED.filter(k => !config[k]);
+if (missing.length) {
+  console.error(`❌ Missing required env vars: ${missing.map(k => ({
+    clientId: 'OAUTH_CLIENT_ID', clientSecret: 'OAUTH_CLIENT_SECRET'
+  })[k]).join(', ')}`);
+  process.exit(1);
+}
+
+// Resolve BASE_URL now that port is confirmed
+if (!config.baseUrl) config.baseUrl = `http://localhost:${config.port}`;
+
+const PORT = config.port;
+const BASE_URL = config.baseUrl;
+const POLL_INTERVAL_MS = 8000; // 8s minimum → ~9,000 units for 4hr stream (fits in 10k daily quota)
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const PORT = process.env.PORT || 3002;
-const POLL_INTERVAL_MS = 8000; // 8s minimum → ~9,000 units for 4hr stream (fits in 10k daily quota)
-const BASE_URL = process.env.BASE_URL ||
-  (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${PORT}`);
-
 // ─── OAuth2 setup ─────────────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
-  process.env.OAUTH_CLIENT_ID,
-  process.env.OAUTH_CLIENT_SECRET,
+  config.clientId,
+  config.clientSecret,
   `${BASE_URL}/auth/callback`
 );
 
 // Save updated tokens — env var takes priority, fallback to file for local dev
 function saveTokens(tokens) {
-  if (!process.env.BASE_URL) {
+  if (!process.env.RAILWAY_PUBLIC_DOMAIN) {
     // Local: write to file
     try { fs.writeFileSync(path.join(__dirname, 'tokens.json'), JSON.stringify(tokens)); } catch {}
   }
@@ -40,8 +67,8 @@ oauth2Client.on('tokens', tokens => {
 
 function loadTokens() {
   // Prefer env var (Railway), fallback to file (local)
-  if (process.env.OAUTH_REFRESH_TOKEN) {
-    return { refresh_token: process.env.OAUTH_REFRESH_TOKEN };
+  if (config.refreshToken) {
+    return { refresh_token: config.refreshToken };
   }
   try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'tokens.json'))); } catch { return null; }
 }
@@ -302,8 +329,8 @@ server.listen(PORT, () => {
   console.log(`   BASE_URL  → ${BASE_URL}`);
   console.log(`   Overlay   → ${BASE_URL}/overlay`);
   console.log(`   Dashboard → ${BASE_URL}/dashboard`);
-  console.log(`   client_id set: ${!!process.env.OAUTH_CLIENT_ID}`);
-  console.log(`   client_secret set: ${!!process.env.OAUTH_CLIENT_SECRET}`);
+  console.log(`   client_id set: ${!!config.clientId}`);
+  console.log(`   client_secret set: ${!!config.clientSecret}`);
 
   if (savedTokens) {
     console.log(`   OAuth tokens found — scanning for live stream...`);
