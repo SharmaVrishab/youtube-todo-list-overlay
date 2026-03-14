@@ -27,9 +27,8 @@ function saveTokens(tokens) {
     // Local: write to file
     try { fs.writeFileSync(path.join(__dirname, 'tokens.json'), JSON.stringify(tokens)); } catch {}
   }
-  // On Railway: log the refresh token so you can copy it into env vars
   if (tokens.refresh_token) {
-    console.log(`\n🔑 Save this as OAUTH_REFRESH_TOKEN in your Railway env vars:\n   ${tokens.refresh_token}\n`);
+    console.log('✅ Refresh token received. Add OAUTH_REFRESH_TOKEN to your Railway env vars.');
   }
 }
 
@@ -73,97 +72,103 @@ function getOrCreate(user) {
   return userTodos[user];
 }
 
+const MAX_TASK_LENGTH = 100;
+const MAX_TASKS_PER_USER = 20;
+
 // ─── Command parser ───────────────────────────────────────────────────────────
 function handleCommand(user, message) {
-  const msg = message.trim();
+  const msg = message.trim().slice(0, 500); // cap raw message length
   const lower = msg.toLowerCase();
+  const safeUser = user.slice(0, 64);
 
   if (lower.startsWith('!add ')) {
     const taskStr = msg.slice(5).trim();
     if (!taskStr) return;
-    const todos = getOrCreate(user);
-    const newTasks = taskStr.split(',').map(t => t.trim()).filter(Boolean);
-    newTasks.forEach(task => {
+    const todos = getOrCreate(safeUser);
+    if (todos.length >= MAX_TASKS_PER_USER) return;
+    const newTasks = taskStr.split(',').map(t => t.trim().slice(0, MAX_TASK_LENGTH)).filter(Boolean);
+    const slotsLeft = MAX_TASKS_PER_USER - todos.length;
+    newTasks.slice(0, slotsLeft).forEach(task => {
       todos.push({ id: nextId++, task, done: false, addedAt: Date.now() });
     });
-    broadcastUser(user);
-    console.log(`[${user}] added: ${newTasks.join(', ')}`);
+    broadcastUser(safeUser);
+    console.log(`[${safeUser}] added: ${newTasks.join(', ')}`);
     return;
   }
 
   if (lower.startsWith('!done')) {
-    const todos = getOrCreate(user);
+    const todos = getOrCreate(safeUser);
     const arg = msg.slice(5).trim();
     if (arg) {
       const num = parseInt(arg, 10);
       if (!isNaN(num) && num >= 1 && num <= todos.length) {
         todos[num - 1].done = true;
-        broadcastUser(user);
-        console.log(`[${user}] done #${num}`);
+        broadcastUser(safeUser);
+        console.log(`[${safeUser}] done #${num}`);
       }
     } else {
       const idx = todos.findIndex(t => !t.done);
       if (idx !== -1) {
         todos[idx].done = true;
-        broadcastUser(user);
-        console.log(`[${user}] done current task`);
+        broadcastUser(safeUser);
+        console.log(`[${safeUser}] done current task`);
       }
     }
     return;
   }
 
   if (lower.startsWith('!remove ') || lower.startsWith('!del ')) {
-    const todos = getOrCreate(user);
+    const todos = getOrCreate(safeUser);
     const arg = msg.replace(/^!(remove|del)\s+/i, '').trim();
     const num = parseInt(arg, 10);
     if (!isNaN(num) && num >= 1 && num <= todos.length) {
       todos.splice(num - 1, 1);
-      broadcastUser(user);
-      console.log(`[${user}] removed #${num}`);
+      broadcastUser(safeUser);
+      console.log(`[${safeUser}] removed #${num}`);
     }
     return;
   }
 
   if (lower.startsWith('!edit ')) {
-    const todos = getOrCreate(user);
+    const todos = getOrCreate(safeUser);
     const parts = msg.slice(6).trim().split(' ');
     const num = parseInt(parts[0], 10);
-    const newText = parts.slice(1).join(' ').trim();
+    const newText = parts.slice(1).join(' ').trim().slice(0, MAX_TASK_LENGTH);
     if (!isNaN(num) && num >= 1 && num <= todos.length && newText) {
       todos[num - 1].task = newText;
-      broadcastUser(user);
-      console.log(`[${user}] edited #${num} -> ${newText}`);
+      broadcastUser(safeUser);
+      console.log(`[${safeUser}] edited #${num} -> ${newText}`);
     }
     return;
   }
 
   if (lower === '!clear') {
-    userTodos[user] = [];
-    broadcastUser(user);
-    console.log(`[${user}] cleared list`);
+    userTodos[safeUser] = [];
+    broadcastUser(safeUser);
+    console.log(`[${safeUser}] cleared list`);
     return;
   }
 
   if (lower.startsWith('!undone ')) {
-    const todos = getOrCreate(user);
+    const todos = getOrCreate(safeUser);
     const num = parseInt(msg.slice(8).trim(), 10);
     if (!isNaN(num) && num >= 1 && num <= todos.length) {
       todos[num - 1].done = false;
-      broadcastUser(user);
-      console.log(`[${user}] undone #${num}`);
+      broadcastUser(safeUser);
+      console.log(`[${safeUser}] undone #${num}`);
     }
     return;
   }
 
   if (lower === '!start') {
     broadcast({ type: 'control', action: 'start' });
-    console.log(`[${user}] overlay scroll started`);
+    console.log(`[${safeUser}] overlay scroll started`);
     return;
   }
 
   if (lower === '!stop') {
     broadcast({ type: 'control', action: 'stop' });
-    console.log(`[${user}] overlay scroll stopped`);
+    console.log(`[${safeUser}] overlay scroll stopped`);
     return;
   }
 }
@@ -245,7 +250,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 // OAuth routes
-app.get('/auth', (req, res) => {
+app.get('/auth', (_req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -257,7 +262,7 @@ app.get('/auth', (req, res) => {
 
 app.get('/auth/callback', async (req, res) => {
   try {
-    const { tokens } = await oauth2Client.getToken({ code: req.query.code, redirect_uri: `${BASE_URL}/auth/callback` });
+    const { tokens } = await oauth2Client.getToken({ code: String(req.query.code), redirect_uri: `${BASE_URL}/auth/callback` });
     oauth2Client.setCredentials(tokens);
     saveTokens(tokens);
     res.send('<h2>✅ Auth successful! You can close this tab.</h2><p>The server is now connected to your YouTube account.</p>');
@@ -275,7 +280,7 @@ app.post('/command', (req, res) => {
   res.json({ todos: userTodos[user] || [] });
 });
 
-app.get('/todos', (req, res) => res.json(userTodos));
+app.get('/todos', (_req, res) => res.json(userTodos));
 app.get('/todos/:user', (req, res) => res.json(userTodos[req.params.user] || []));
 
 app.delete('/todos/:user', (req, res) => {
@@ -284,15 +289,9 @@ app.delete('/todos/:user', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/', (req, res) => res.redirect('/dashboard'));
-app.get('/debug', (_req, res) => res.json({
-  BASE_URL,
-  redirect_uri: `${BASE_URL}/auth/callback`,
-  has_client_id: !!process.env.OAUTH_CLIENT_ID,
-  has_client_secret: !!process.env.OAUTH_CLIENT_SECRET,
-}));
-app.get('/overlay', (req, res) => res.sendFile(path.join(__dirname, 'overlay.html')));
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
+app.get('/', (_req, res) => res.redirect('/dashboard'));
+app.get('/overlay', (_req, res) => res.sendFile(path.join(__dirname, 'overlay.html')));
+app.get('/dashboard', (_req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 wss.on('connection', ws => {
