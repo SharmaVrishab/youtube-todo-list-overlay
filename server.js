@@ -285,6 +285,12 @@ app.delete('/todos/:user', (req, res) => {
 });
 
 app.get('/', (req, res) => res.redirect('/dashboard'));
+app.get('/debug', (_req, res) => res.json({
+  BASE_URL,
+  redirect_uri: `${BASE_URL}/auth/callback`,
+  has_client_id: !!process.env.OAUTH_CLIENT_ID,
+  has_client_secret: !!process.env.OAUTH_CLIENT_SECRET,
+}));
 app.get('/overlay', (req, res) => res.sendFile(path.join(__dirname, 'overlay.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
