@@ -12,24 +12,38 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3002;
 const POLL_INTERVAL_MS = 5000;
-const TOKEN_PATH = path.join(__dirname, 'tokens.json');
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // ─── OAuth2 setup ─────────────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
   process.env.OAUTH_CLIENT_ID,
   process.env.OAUTH_CLIENT_SECRET,
-  `http://localhost:${PORT}/auth/callback`
+  `${BASE_URL}/auth/callback`
 );
 
-// Auto-refresh tokens and save updated ones
+// Save updated tokens — env var takes priority, fallback to file for local dev
+function saveTokens(tokens) {
+  if (!process.env.BASE_URL) {
+    // Local: write to file
+    try { fs.writeFileSync(path.join(__dirname, 'tokens.json'), JSON.stringify(tokens)); } catch {}
+  }
+  // On Railway: log the refresh token so you can copy it into env vars
+  if (tokens.refresh_token) {
+    console.log(`\n🔑 Save this as OAUTH_REFRESH_TOKEN in your Railway env vars:\n   ${tokens.refresh_token}\n`);
+  }
+}
+
 oauth2Client.on('tokens', tokens => {
   const existing = loadTokens() || {};
-  const merged = { ...existing, ...tokens };
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(merged));
+  saveTokens({ ...existing, ...tokens });
 });
 
 function loadTokens() {
-  try { return JSON.parse(fs.readFileSync(TOKEN_PATH)); } catch { return null; }
+  // Prefer env var (Railway), fallback to file (local)
+  if (process.env.OAUTH_REFRESH_TOKEN) {
+    return { refresh_token: process.env.OAUTH_REFRESH_TOKEN };
+  }
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'tokens.json'))); } catch { return null; }
 }
 
 const savedTokens = loadTokens();
@@ -244,7 +258,7 @@ app.get('/auth/callback', async (req, res) => {
   try {
     const { tokens } = await oauth2Client.getToken(req.query.code);
     oauth2Client.setCredentials(tokens);
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+    saveTokens(tokens);
     res.send('<h2>✅ Auth successful! You can close this tab.</h2><p>The server is now connected to your YouTube account.</p>');
     console.log('✅ OAuth tokens saved. Starting live chat detection...');
     fetchLiveChatId();
