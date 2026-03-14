@@ -312,8 +312,11 @@ wss.on('connection', ws => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`\n🎬 YouTube To-Do Widget running!`);
+  console.log(`   BASE_URL  → ${BASE_URL}`);
   console.log(`   Overlay   → ${BASE_URL}/overlay`);
   console.log(`   Dashboard → ${BASE_URL}/dashboard`);
+  console.log(`   client_id set: ${!!process.env.OAUTH_CLIENT_ID}`);
+  console.log(`   client_secret set: ${!!process.env.OAUTH_CLIENT_SECRET}`);
 
   if (savedTokens) {
     console.log(`   OAuth tokens found — scanning for live stream...`);
