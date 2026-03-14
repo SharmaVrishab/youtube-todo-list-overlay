@@ -130,19 +130,6 @@ function handleCommand(user, message) {
     return;
   }
 
-  if (lower.startsWith('!edit ')) {
-    const todos = getOrCreate(safeUser);
-    const parts = msg.slice(6).trim().split(' ');
-    const num = parseInt(parts[0], 10);
-    const newText = parts.slice(1).join(' ').trim().slice(0, MAX_TASK_LENGTH);
-    if (!isNaN(num) && num >= 1 && num <= todos.length && newText) {
-      todos[num - 1].task = newText;
-      broadcastUser(safeUser);
-      console.log(`[${safeUser}] edited #${num} -> ${newText}`);
-    }
-    return;
-  }
-
   if (lower === '!clear') {
     userTodos[safeUser] = [];
     broadcastUser(safeUser);

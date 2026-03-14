@@ -49,6 +49,8 @@
       margin-top: 2px;
     }
 
+    .header-right { display: flex; align-items: center; gap: 10px; }
+
     .ws-pill {
       display: flex;
       align-items: center;
@@ -71,11 +73,57 @@
 
     .ws-dot.on { background: #50c050; }
 
+    /* ── Controls bar ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .btn-scroll {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--gold);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn-scroll:hover { background: var(--surface2); border-color: var(--gold-dim); }
+
+    .btn-auth {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(210,165,80,0.1);
+      border: 1px solid rgba(210,165,80,0.35);
+      color: var(--gold);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+
+    .btn-auth:hover { background: rgba(210,165,80,0.18); }
+
     /* ── Add bar ── */
     .add-bar {
       display: flex;
       gap: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 24px;
     }
 
     .add-bar input {
@@ -112,16 +160,10 @@
 
     .btn-add:hover { opacity: 0.85; }
 
-    .add-hint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 22px;
-    }
-
     #status {
       font-size: 11px;
       color: var(--gold);
-      margin-left: 8px;
+      align-self: center;
     }
 
     /* ── Section title ── */
@@ -198,9 +240,7 @@
     }
 
     /* ── Task rows ── */
-    .task-list {
-      padding: 6px 0 6px;
-    }
+    .task-list { padding: 6px 0 6px; }
 
     .task-row {
       display: flex;
@@ -255,70 +295,6 @@
     .btn-undone { background: rgba(180,140,40,0.18); color: #d4a84b; border-color: rgba(180,140,40,0.3); }
     .btn-remove { background: rgba(180,60,60,0.18);  color: #e08080; border-color: rgba(180,60,60,0.3); }
 
-    /* ── Command bar ── */
-    .cmd-bar {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .cmd-bar input {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: inherit;
-      font-size: 13px;
-      padding: 9px 12px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .cmd-bar input:focus { border-color: var(--gold-dim); }
-    #cmdUser { width: 130px; flex-shrink: 0; }
-    #cmdMsg  { flex: 1; }
-
-    .btn-send {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: 8px;
-      font-family: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 9px 16px;
-      cursor: pointer;
-      flex-shrink: 0;
-      transition: border-color 0.2s;
-    }
-
-    .btn-send:hover { border-color: var(--gold-dim); }
-
-    .cmd-hint {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      margin-bottom: 22px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .btn-quick {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--gold);
-      border-radius: 20px;
-      font-family: inherit;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 12px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .btn-quick:hover { background: var(--surface2); }
-
     /* ── Empty state ── */
     .empty {
       text-align: center;
@@ -345,25 +321,19 @@
   </div>
 </div>
 
+<!-- ── Controls ── -->
+<div class="controls">
+  <button class="btn-scroll" onclick="quickCmd('!start')">▶ Start scroll</button>
+  <button class="btn-scroll" onclick="quickCmd('!stop')">■ Stop scroll</button>
+  <a href="/auth" class="btn-auth">🔗 Connect YouTube</a>
+</div>
+
 <!-- ── Add tasks ── -->
 <div class="add-bar">
   <input id="inUser"  type="text" placeholder="Username" />
   <input id="inTasks" type="text" placeholder="Task 1, Task 2, Task 3…" />
   <button class="btn-add" onclick="addTasks()">+ Add</button>
   <span id="status"></span>
-</div>
-<div class="add-hint">Separate tasks with commas · Press Enter to submit</div>
-
-<!-- ── Command bar ── -->
-<div class="cmd-bar">
-  <input id="cmdUser" type="text" placeholder="Username" />
-  <input id="cmdMsg"  type="text" placeholder="!start · !stop · !done 2 · !remove 1 · !clear · !edit 2 new text" />
-  <button class="btn-send" onclick="sendCmd()">Send</button>
-</div>
-<div class="cmd-hint">
-  Quick actions:
-  <button class="btn-quick" onclick="quickCmd('!start')">▶ Start scroll</button>
-  <button class="btn-quick" onclick="quickCmd('!stop')">■ Stop scroll</button>
 </div>
 
 <!-- ── All users ── -->
@@ -373,7 +343,7 @@
 </div>
 
 <script>
-  const state = {}; // username -> [{ id, task, done }]
+  const state = {};
 
   // ── WebSocket ──────────────────────────────────────────────────────────────
   const wsDot   = document.getElementById('wsDot');
@@ -417,7 +387,7 @@
   function render() {
     const users = Object.keys(state);
     if (users.length === 0) {
-      taskArea.innerHTML = `<div class="empty">No active tasks yet.<br>Type a username + tasks above, or have viewers use <code>!add</code> in chat.</div>`;
+      taskArea.innerHTML = `<div class="empty">No active tasks yet.<br>Have viewers use <code>!add</code> in chat.</div>`;
       return;
     }
     taskArea.innerHTML = users.map(userGroup).join('');
@@ -473,19 +443,8 @@
     await post('/command', { user, message });
   }
 
-  async function sendCmd() {
-    const user    = document.getElementById('cmdUser').value.trim();
-    const message = document.getElementById('cmdMsg').value.trim();
-    if (!message) return;
-    // Commands like !start / !stop don't need a user — use a placeholder
-    await post('/command', { user: user || '_host', message });
-    document.getElementById('cmdMsg').value = '';
-    flash(`Sent: ${message}`);
-  }
-
   async function quickCmd(message) {
     await post('/command', { user: '_host', message });
-    flash(`Sent: ${message}`);
   }
 
   async function clearUser(user) {
@@ -508,7 +467,6 @@
     setTimeout(() => { el.textContent = ''; }, 2500);
   }
 
-  // ── Utils ──────────────────────────────────────────────────────────────────
   const h   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const esc = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
@@ -516,9 +474,6 @@
 
   document.getElementById('inTasks').addEventListener('keydown', e => {
     if (e.key === 'Enter') addTasks();
-  });
-  document.getElementById('cmdMsg').addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendCmd();
   });
 </script>
 </body>
