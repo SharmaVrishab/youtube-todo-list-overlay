@@ -315,9 +315,15 @@
     <h1>Stream To-Do Dashboard</h1>
     <p>OBS overlay → <code style="color:var(--gold)" id="overlayUrl">/overlay</code></p>
   </div>
-  <div class="ws-pill">
-    <span class="ws-dot" id="wsDot"></span>
-    <span id="wsLabel">Connecting…</span>
+  <div style="display:flex;gap:8px;align-items:center">
+    <div class="ws-pill">
+      <span class="ws-dot" id="wsDot"></span>
+      <span id="wsLabel">Connecting…</span>
+    </div>
+    <div class="ws-pill">
+      <span class="ws-dot" id="ytDot"></span>
+      <span id="ytLabel">YouTube: —</span>
+    </div>
   </div>
 </div>
 
@@ -326,6 +332,7 @@
   <button class="btn-scroll" onclick="quickCmd('!start')">▶ Start scroll</button>
   <button class="btn-scroll" onclick="quickCmd('!stop')">■ Stop scroll</button>
   <a href="/auth" class="btn-auth">🔗 Connect YouTube</a>
+  <button class="btn-scroll" onclick="disconnect()" style="background:#5a2020;border-color:#8a3030">⏹ Disconnect</button>
 </div>
 
 <!-- ── Add tasks ── -->
@@ -348,6 +355,8 @@
   // ── WebSocket ──────────────────────────────────────────────────────────────
   const wsDot   = document.getElementById('wsDot');
   const wsLabel = document.getElementById('wsLabel');
+  const ytDot   = document.getElementById('ytDot');
+  const ytLabel = document.getElementById('ytLabel');
   let ws;
 
   function connect() {
@@ -355,7 +364,7 @@
 
     ws.onopen = () => {
       wsDot.classList.add('on');
-      wsLabel.textContent = 'Connected';
+      wsLabel.textContent = 'Connected to server';
     };
 
     ws.onmessage = e => {
@@ -368,6 +377,11 @@
       } else if (data.type === 'user') {
         if (data.todos.length === 0) delete state[data.user];
         else state[data.user] = data.todos;
+      } else if (data.type === 'youtube') {
+        ytDot.classList.toggle('on', data.connected);
+        ytLabel.textContent = data.connected ? `YouTube: Live` : 'YouTube: Not live';
+        ytLabel.title = data.title || '';
+        return;
       }
       render();
     };
@@ -447,16 +461,31 @@
     await post('/command', { user: '_host', message });
   }
 
+  async function disconnect() {
+    await fetch('/disconnect', { method: 'POST', headers: authHeaders });
+  }
+
+  const authHeaders = { 'Content-Type': 'application/json', 'x-dashboard-token': window.__DT__ };
+
+  function handleAuthError(status) {
+    if (status === 403) {
+      alert('Session expired — server was restarted. Refreshing page...');
+      location.reload();
+    }
+  }
+
   async function clearUser(user) {
-    await fetch(`/todos/${user}`, { method: 'DELETE' });
+    const r = await fetch(`/todos/${user}`, { method: 'DELETE', headers: authHeaders });
+    handleAuthError(r.status);
   }
 
   async function post(path, body) {
     const r = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify(body)
     });
+    handleAuthError(r.status);
     return r.json();
   }
 

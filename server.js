@@ -38,6 +38,9 @@ const PORT = config.port;
 const BASE_URL = config.baseUrl;
 const POLL_INTERVAL_MS = 8000; // 8s minimum → ~9,000 units for 4hr stream (fits in 10k daily quota)
 
+// Random token generated at startup — injected into dashboard HTML, required on sensitive endpoints
+const DASHBOARD_TOKEN = require('crypto').randomBytes(24).toString('hex');
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -94,6 +97,12 @@ function broadcastUser(user) {
   broadcast({ type: 'user', user, todos: userTodos[user] || [] });
 }
 
+let youtubeStatus = { connected: false, title: null };
+
+function broadcastYouTubeStatus() {
+  broadcast({ type: 'youtube', ...youtubeStatus });
+}
+
 // ─── Task helpers ─────────────────────────────────────────────────────────────
 function getOrCreate(user) {
   if (!userTodos[user]) userTodos[user] = [];
@@ -114,6 +123,7 @@ function handleCommand(user, message) {
   const now = Date.now();
   if (lastCmdTime[safeUser] && now - lastCmdTime[safeUser] < CMD_COOLDOWN_MS) return;
   lastCmdTime[safeUser] = now;
+  setTimeout(() => delete lastCmdTime[safeUser], CMD_COOLDOWN_MS);
 
   if (lower.startsWith('!add ')) {
     const taskStr = msg.slice(5).trim();
@@ -181,13 +191,17 @@ function handleCommand(user, message) {
     return;
   }
 
+  const isHost = hostDisplayName ? safeUser === hostDisplayName : safeUser === '_host';
+
   if (lower === '!start') {
+    if (!isHost) return;
     broadcast({ type: 'control', action: 'start' });
     console.log(`[${safeUser}] overlay scroll started`);
     return;
   }
 
   if (lower === '!stop') {
+    if (!isHost) return;
     broadcast({ type: 'control', action: 'stop' });
     console.log(`[${safeUser}] overlay scroll stopped`);
     return;
@@ -197,13 +211,44 @@ function handleCommand(user, message) {
 // ─── YouTube Live Chat polling ────────────────────────────────────────────────
 let pageToken = null;
 let activeLiveChatId = null;
+let hostDisplayName = null; // set from YouTube channel on first auth
+let pollingEnabled = true;  // set false via /disconnect to stop all API calls
+let isScanning    = false;  // prevents double polling if /auth called while already scanning
+
+function resetYouTubeState() {
+  activeLiveChatId = null;
+  pageToken = null;
+  scanStartTime = null;
+  isScanning = false;
+  fetchRetries = 0;
+  pollRetries = 0;
+  youtubeStatus = { connected: false, title: null };
+  broadcastYouTubeStatus();
+}
+
+function stopPolling() {
+  pollingEnabled = false;
+  resetYouTubeState();
+  console.log('YouTube polling stopped via dashboard.');
+}
 
 const MAX_RETRIES = 5;
+const MAX_SCAN_MS = 10 * 60 * 1000; // stop scanning 10 min after stream ends
 let fetchRetries = 0;
 let pollRetries  = 0;
 let lastPollInterval = POLL_INTERVAL_MS; // track YouTube's requested interval
+let scanStartTime = null;
 
 async function fetchLiveChatId() {
+  if (!pollingEnabled || isScanning) return;
+  isScanning = true;
+  if (!scanStartTime) scanStartTime = Date.now();
+  if (Date.now() - scanStartTime > MAX_SCAN_MS) {
+    console.log('No stream found after 10 min — scan stopped. Visit /auth to restart.');
+    resetYouTubeState();
+    return;
+  }
+
   try {
     const res = await youtube.liveBroadcasts.list({
       part: ['snippet', 'status'],
@@ -226,13 +271,28 @@ async function fetchLiveChatId() {
     }
 
     fetchRetries = 0; // reset on success
+    scanStartTime = null; // reset scan timer
     activeLiveChatId = chatId;
+
+    // Resolve host display name from authenticated channel
+    if (!hostDisplayName) {
+      try {
+        const ch = await youtube.channels.list({ part: ['snippet'], mine: true });
+        hostDisplayName = ch.data.items?.[0]?.snippet?.title || null;
+        if (hostDisplayName) console.log(`   Host identified as: "${hostDisplayName}"`);
+      } catch {}
+    }
+
+    youtubeStatus = { connected: true, title: broadcast.snippet.title };
+    broadcastYouTubeStatus();
+    isScanning = false;
     console.log(`✅ Live chat detected: "${broadcast.snippet.title}"`);
     pollYouTubeChat();
   } catch (err) {
     console.error('Error fetching live chat ID:', err.response?.data?.error?.message || err.message);
     if (++fetchRetries >= MAX_RETRIES) {
       console.error(`❌ fetchLiveChatId failed ${MAX_RETRIES} times — giving up. Re-authenticate to restart.`);
+      isScanning = false;
       return;
     }
     setTimeout(fetchLiveChatId, 30000);
@@ -240,7 +300,7 @@ async function fetchLiveChatId() {
 }
 
 async function pollYouTubeChat() {
-  if (!activeLiveChatId) return;
+  if (!pollingEnabled || !activeLiveChatId) return;
   try {
     const params = {
       liveChatId: activeLiveChatId,
@@ -256,9 +316,9 @@ async function pollYouTubeChat() {
     const items = res.data.items || [];
 
     items.forEach(item => {
-      const user = item.authorDetails.displayName;
-      const text = item.snippet.displayMessage || '';
-      if (text.startsWith('!')) handleCommand(user, text);
+      const user = item.authorDetails?.displayName;
+      const text = item.snippet?.displayMessage || '';
+      if (user && text.startsWith('!')) handleCommand(user, text);
     });
 
     lastPollInterval = Math.max(res.data.pollingIntervalMillis || POLL_INTERVAL_MS, POLL_INTERVAL_MS);
@@ -268,9 +328,7 @@ async function pollYouTubeChat() {
     const message = err.response?.data?.error?.message || err.message;
     console.error('YouTube chat poll error:', message);
     if (status === 403 || status === 404) {
-      activeLiveChatId = null;
-      pageToken = null;
-      fetchRetries = 0;
+      resetYouTubeState();
       console.log('Live chat ended, scanning for new stream...');
       setTimeout(fetchLiveChatId, 30000);
     } else {
@@ -289,8 +347,20 @@ async function pollYouTubeChat() {
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
+// ─── Dashboard auth middleware ────────────────────────────────────────────────
+function requireDashboardToken(req, res, next) {
+  if (req.headers['x-dashboard-token'] === DASHBOARD_TOKEN) return next();
+  res.status(403).json({ error: 'Forbidden' });
+}
+
+app.post('/disconnect', requireDashboardToken, (_req, res) => {
+  stopPolling();
+  res.json({ ok: true });
+});
+
 // OAuth routes
 app.get('/auth', (_req, res) => {
+  pollingEnabled = true; // re-enable if previously disconnected
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -313,7 +383,7 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-app.post('/command', (req, res) => {
+app.post('/command', requireDashboardToken, (req, res) => {
   const { user, message } = req.body;
   if (!user || !message) return res.status(400).json({ error: 'user and message required' });
   handleCommand(user, message);
@@ -323,20 +393,25 @@ app.post('/command', (req, res) => {
 app.get('/todos', (_req, res) => res.json(userTodos));
 app.get('/todos/:user', (req, res) => res.json(userTodos[req.params.user] || []));
 
-app.delete('/todos/:user', (req, res) => {
+app.delete('/todos/:user', requireDashboardToken, (req, res) => {
   userTodos[req.params.user] = [];
   broadcastUser(req.params.user);
   res.json({ ok: true });
 });
 
+app.get('/health', (_req, res) => res.json({ ok: true, youtube: youtubeStatus.connected }));
 app.get('/', (_req, res) => res.redirect('/dashboard'));
 app.get('/overlay', (_req, res) => res.sendFile(path.join(__dirname, 'overlay.html')));
-app.get('/dashboard', (_req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
+app.get('/dashboard', (_req, res) => {
+  const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8');
+  res.send(html.replace('</head>', `<script>window.__DT__="${DASHBOARD_TOKEN}";</script></head>`));
+});
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 wss.on('connection', ws => {
   console.log('Overlay/dashboard connected');
   ws.send(JSON.stringify({ type: 'all', users: userTodos }));
+  ws.send(JSON.stringify({ type: 'youtube', ...youtubeStatus }));
 
   ws.on('message', raw => {
     try {
