@@ -102,12 +102,18 @@ function getOrCreate(user) {
 
 const MAX_TASK_LENGTH = 100;
 const MAX_TASKS_PER_USER = 20;
+const CMD_COOLDOWN_MS = 2000; // 1 command per user per 2s
+const lastCmdTime = {};
 
 // ─── Command parser ───────────────────────────────────────────────────────────
 function handleCommand(user, message) {
   const msg = message.trim().slice(0, 500); // cap raw message length
   const lower = msg.toLowerCase();
   const safeUser = user.slice(0, 64);
+
+  const now = Date.now();
+  if (lastCmdTime[safeUser] && now - lastCmdTime[safeUser] < CMD_COOLDOWN_MS) return;
+  lastCmdTime[safeUser] = now;
 
   if (lower.startsWith('!add ')) {
     const taskStr = msg.slice(5).trim();
