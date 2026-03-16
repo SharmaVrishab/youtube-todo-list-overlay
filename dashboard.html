@@ -119,6 +119,70 @@
 
     .btn-auth:hover { background: rgba(210,165,80,0.18); }
 
+    /* ── Session bar ── */
+    .session-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+
+    .session-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      flex-shrink: 0;
+    }
+
+    .session-sep {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .session-bar input[type="number"] {
+      width: 56px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 8px;
+      outline: none;
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+
+    .session-bar input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .session-bar input[type="number"]:focus { border-color: var(--gold-dim); }
+
+    .btn-session {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--gold);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-session:hover { background: rgba(210,165,80,0.12); }
+
+    #sessionStatus {
+      font-size: 11px;
+      color: var(--gold);
+    }
+
     /* ── Add bar ── */
     .add-bar {
       display: flex;
@@ -328,6 +392,16 @@
   <a href="/auth" class="btn-auth">🔗 Connect YouTube</a>
 </div>
 
+<!-- ── Session counter ── -->
+<div class="session-bar">
+  <span class="session-label">Session</span>
+  <input id="inCurrent" type="number" min="1" placeholder="1" title="Current session" />
+  <span class="session-sep">of</span>
+  <input id="inTotal"   type="number" min="1" placeholder="8" title="Total sessions" />
+  <button class="btn-session" onclick="setSession()">Set</button>
+  <span id="sessionStatus"></span>
+</div>
+
 <!-- ── Add tasks ── -->
 <div class="add-bar">
   <input id="inUser"  type="text" placeholder="Username" />
@@ -445,6 +519,21 @@
 
   async function quickCmd(message) {
     await post('/command', { user: '_host', message });
+  }
+
+  async function setSession() {
+    const cur   = parseInt(document.getElementById('inCurrent').value, 10);
+    const total = parseInt(document.getElementById('inTotal').value, 10);
+    if (!cur || !total || cur < 1 || total < 1) return flashSession('Enter valid numbers', false);
+    await post('/command', { user: '_host', message: `!session ${cur} ${total}` });
+    flashSession(`Session ${cur} of ${total} set`);
+  }
+
+  function flashSession(msg, ok = true) {
+    const el = document.getElementById('sessionStatus');
+    el.style.color = ok ? 'var(--gold)' : '#e08080';
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = ''; }, 2500);
   }
 
   async function clearUser(user) {
