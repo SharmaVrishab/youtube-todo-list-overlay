@@ -183,7 +183,7 @@
   let ws;
 
   function connect() {
-    ws = new WebSocket(`ws://${location.host}`);
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
     ws.onmessage = e => {
       const data = JSON.parse(e.data);
       if (data.type === 'all') {
