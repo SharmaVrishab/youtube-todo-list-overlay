@@ -195,6 +195,7 @@ let activeLiveChatId = null;
 const MAX_RETRIES = 5;
 let fetchRetries = 0;
 let pollRetries  = 0;
+let lastPollInterval = POLL_INTERVAL_MS; // track YouTube's requested interval
 
 async function fetchLiveChatId() {
   try {
@@ -254,11 +255,12 @@ async function pollYouTubeChat() {
       if (text.startsWith('!')) handleCommand(user, text);
     });
 
-    const interval = Math.max(res.data.pollingIntervalMillis || POLL_INTERVAL_MS, POLL_INTERVAL_MS);
-    setTimeout(pollYouTubeChat, interval);
+    lastPollInterval = Math.max(res.data.pollingIntervalMillis || POLL_INTERVAL_MS, POLL_INTERVAL_MS);
+    setTimeout(pollYouTubeChat, lastPollInterval);
   } catch (err) {
     const status = err.response?.status;
-    console.error('YouTube chat poll error:', err.response?.data?.error?.message || err.message);
+    const message = err.response?.data?.error?.message || err.message;
+    console.error('YouTube chat poll error:', message);
     if (status === 403 || status === 404) {
       activeLiveChatId = null;
       pageToken = null;
@@ -270,7 +272,9 @@ async function pollYouTubeChat() {
         console.error(`❌ pollYouTubeChat failed ${MAX_RETRIES} times — giving up. Re-authenticate to restart.`);
         return;
       }
-      setTimeout(pollYouTubeChat, POLL_INTERVAL_MS);
+      // On "too soon" errors respect YouTube's interval; otherwise back off 2x
+      const backoff = message.includes('too soon') ? lastPollInterval : Math.min(lastPollInterval * 2, 60000);
+      setTimeout(pollYouTubeChat, backoff);
     }
   }
 }
