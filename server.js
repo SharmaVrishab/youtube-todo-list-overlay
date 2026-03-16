@@ -181,17 +181,6 @@ function handleCommand(user, message) {
     return;
   }
 
-  if (lower.startsWith('!session ')) {
-    const parts = msg.slice(9).trim().split(/\s+/);
-    const cur   = parseInt(parts[0], 10);
-    const total = parseInt(parts[1], 10);
-    if (!isNaN(cur) && !isNaN(total) && cur >= 1 && total >= 1) {
-      broadcast({ type: 'session', current: cur, total });
-      console.log(`[${safeUser}] session ${cur}/${total}`);
-    }
-    return;
-  }
-
   if (lower === '!start') {
     broadcast({ type: 'control', action: 'start' });
     console.log(`[${safeUser}] overlay scroll started`);
