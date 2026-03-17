@@ -191,7 +191,7 @@ function handleCommand(user, message) {
     return;
   }
 
-  const isHost = hostDisplayName ? safeUser === hostDisplayName : safeUser === '_host';
+  const isHost = safeUser === '_host' || (hostDisplayName && safeUser === hostDisplayName);
 
   if (lower === '!start') {
     if (!isHost) return;
@@ -259,6 +259,7 @@ async function fetchLiveChatId() {
     const broadcast = res.data.items?.find(b => b.status?.lifeCycleStatus === 'live');
     if (!broadcast) {
       console.log('No active broadcast found, retrying in 30s...');
+      isScanning = false;
       setTimeout(fetchLiveChatId, 30000);
       return;
     }
@@ -266,6 +267,7 @@ async function fetchLiveChatId() {
     const chatId = broadcast.snippet?.liveChatId;
     if (!chatId) {
       console.log('Broadcast found but no live chat, retrying in 30s...');
+      isScanning = false;
       setTimeout(fetchLiveChatId, 30000);
       return;
     }
@@ -295,6 +297,7 @@ async function fetchLiveChatId() {
       isScanning = false;
       return;
     }
+    isScanning = false;
     setTimeout(fetchLiveChatId, 30000);
   }
 }
